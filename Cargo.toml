@@ -1,0 +1,24 @@
+[package]
+name = "gfx_window_any"
+# description = "Cross-platform window creation and event loop abstraction for gfx-rs."
+version = "0.1.0"
+authors = ["Michael Tang <tangmi@uw.edu>"]
+edition = "2018"
+
+[features]
+mint = ["gfx_core/mint", "gfx/mint"]
+
+[dependencies]
+log = "0.4"
+winit = "0.19"
+gfx_core = "0.9"
+gfx = "0.18"
+
+[target.'cfg(not(target_os = "windows"))'.dependencies]
+glutin = "0.20.0"
+gfx_device_gl = "0.16"
+gfx_window_glutin = "0.30"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+gfx_device_dx11 = "0.8"
+gfx_window_dxgi = "0.19"
