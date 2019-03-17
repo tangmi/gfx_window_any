@@ -30,6 +30,7 @@ pub struct WindowTargets<R: gfx::Resources> {
 }
 
 impl<R: gfx::Resources> WindowTargets<R> {
+    #[allow(clippy::cast_possible_truncation)]
     pub fn aspect_ratio(&self) -> f32 {
         self.size.width as f32 / self.size.height as f32
     }
@@ -39,6 +40,7 @@ impl<R: gfx::Resources> WindowTargets<R> {
     }
 }
 
+#[allow(unused_variables)]
 pub trait Application<R>
 where
     R: gfx::Resources,
@@ -69,12 +71,15 @@ where
 
     fn on_event(&mut self, event: winit::WindowEvent);
 
-    fn run(window_builder: winit::WindowBuilder)
+    fn launch_new_window(window_builder: winit::WindowBuilder)
     where
         Self: Sized + Application<Resources>,
     {
-        run_loop::<Self, Resources, backend::Backend>(window_builder);
+        create_window_and_run_loop::<Self, Resources, backend::Backend>(window_builder);
     }
+
+    // TODO: allow for attaching to an existing window (HWND, HTMLCanvas, etc)... this might need to be platform-specific.
+    // fn attach_to_window();
 
     /// Called when the swapchain has changed size. Apps should recreate any screen-sized resources (e.g. G-buffers).
     fn on_swapchain_resized(
@@ -86,7 +91,7 @@ where
 }
 
 #[allow(clippy::float_cmp)]
-fn run_loop<A, R, B>(window_builder: winit::WindowBuilder)
+fn create_window_and_run_loop<A, R, B>(window_builder: winit::WindowBuilder)
 where
     A: Sized + Application<R>,
     R: gfx::Resources,
@@ -167,9 +172,6 @@ where
             if let Some(new_window_targets) = new_window_targets {
                 app.on_swapchain_resized(&mut factory, new_window_targets);
             }
-
-            // why?
-            // continue;
         }
 
         app.update_2(frame_start_time.elapsed());
@@ -206,7 +208,7 @@ trait Backend<R: gfx::Resources> {
 
     /// NOTE: this is a method on [`Backend`] to avoid type resolution errors. The implementation should be the same for all backends.
     ///
-    /// TODO: understand what is going on if I inline the implementation of `Backend::flush` into it's usage in `run_loop`.
+    /// TODO: understand what is going on if I inline the implementation of `Backend::flush` into it's usage in `create_window_and_run_loop`.
     fn flush(encode: &mut gfx::Encoder<R, Self::CommandBuffer>, device: &mut Self::Device);
 
     fn get_winit_window(window: &Self::Window) -> &winit::Window;
@@ -319,6 +321,7 @@ mod backend {
     }
 }
 
+// Note: this includes building `wasm32-unknown-emscripten` on Windows
 #[cfg(not(target_os = "windows"))]
 mod backend {
     use super::*;
@@ -414,54 +417,5 @@ mod backend {
                 hidpi_factor: new_hidpi_factor,
             })
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    struct TestApplication {
-        window_targets: WindowTargets<Resources>,
-    }
-
-    impl Application<Resources> for TestApplication {
-        fn new(
-            factory: &mut impl gfx::Factory<Resources>,
-            window: &winit::Window,
-            window_targets: WindowTargets<Resources>,
-        ) -> Self {
-            // can get windows-specific stuff?
-            // use winit::os::windows::WindowExt;
-            // dbg!(window.get_hwnd());
-
-            TestApplication { window_targets }
-        }
-
-        fn update(&mut self, frame_delta_in_seconds: f64) {
-            let frame_delta_in_milli = frame_delta_in_seconds * 1_000_f64;
-            // dbg!(frame_delta_in_milli);
-        }
-
-        fn render<C: gfx::CommandBuffer<Resources>>(
-            &self,
-            factory: &mut impl gfx::Factory<Resources>,
-            encoder: &mut gfx::Encoder<Resources, C>,
-        ) {
-            // dbg!(&self.window_targets.color);
-            encoder.clear(&self.window_targets.color, [1.0, 0.0, 0.0, 1.0]);
-        }
-
-        fn on_event(&mut self, event: winit::WindowEvent) {
-            // dbg!(event);
-        }
-    }
-
-    #[test]
-    fn launch_test() {
-        env_logger::init();
-
-        let window_builder = winit::WindowBuilder::new().with_title("hello");
-        TestApplication::run(window_builder);
     }
 }
