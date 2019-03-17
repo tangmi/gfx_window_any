@@ -21,11 +21,6 @@ pub type Resources = gfx_device_dx11::Resources;
 #[cfg(not(target_os = "windows"))]
 pub type Resources = gfx_device_gl::Resources;
 
-#[cfg(not(target_os = "windows"))]
-mod types {
-    pub type Resources = gfx_device_gl::Resources;
-}
-
 #[derive(Debug)]
 pub struct WindowTargets<R: gfx::Resources> {
     pub color: gfx::handle::RenderTargetView<R, ColorFormat>,
@@ -326,11 +321,12 @@ mod backend {
 
 #[cfg(not(target_os = "windows"))]
 mod backend {
-    struct Backend {}
+    use super::*;
 
-    impl Backend<Resources> for Backend {
-        type Device =
-            gfx_device_gl::Device<Resources = Resources, CommandBuffer = Self::CommandBuffer>;
+    pub struct Backend {}
+
+    impl super::Backend<Resources> for Backend {
+        type Device = gfx_device_gl::Device;
         type Factory = gfx_device_gl::Factory;
         type CommandBuffer = gfx_device_gl::CommandBuffer;
         type Window = glutin::WindowedContext;
@@ -338,13 +334,7 @@ mod backend {
         fn init(
             window_builder: winit::WindowBuilder,
             events_loop: &winit::EventsLoop,
-        ) -> (
-            Self::Window,
-            Self::Device,
-            Self::Factory,
-            gfx::handle::RenderTargetView<Resources, ColorFormat>,
-            gfx::handle::DepthStencilView<Resources, DepthFormat>,
-        ) {
+        ) -> BackendInit<Resources, Self> {
             #[cfg(target_os = "emscripten")]
             let gl_version = glutin::GlRequest::Specific(glutin::Api::WebGl, (2, 0));
 
@@ -375,11 +365,54 @@ mod backend {
             //     shade::Backend::Glsl(shade_lang)
             // };
 
-            (window, device, factory, main_color, main_depth)
+            BackendInit {
+                window,
+                device,
+                factory,
+                main_color,
+                main_depth,
+            }
+        }
+
+        fn create_encoder(
+            factory: &mut Self::Factory,
+        ) -> gfx::Encoder<Resources, Self::CommandBuffer> {
+            factory.create_command_buffer().into()
+        }
+
+        fn flush(
+            encode: &mut gfx::Encoder<Resources, Self::CommandBuffer>,
+            device: &mut Self::Device,
+        ) {
+            encode.flush(device);
+        }
+
+        fn get_winit_window(window: &Self::Window) -> &winit::Window {
+            window
         }
 
         fn swap_buffers(window: &Self::Window) {
             window.swap_buffers().unwrap();
+        }
+
+        fn resize_swapchain(
+            window: &mut Self::Window,
+            factory: &mut Self::Factory,
+            device: &mut Self::Device,
+            new_size: winit::dpi::LogicalSize,
+            new_hidpi_factor: f64,
+        ) -> Option<WindowTargets<Resources>> {
+            let physical_size = new_size.to_physical(new_hidpi_factor);
+
+            window.resize(physical_size);
+            let (new_color, new_depth) = gfx_window_glutin::new_views(&window);
+
+            Some(WindowTargets {
+                color: new_color,
+                depth: new_depth,
+                size: new_size,
+                hidpi_factor: new_hidpi_factor,
+            })
         }
     }
 }
